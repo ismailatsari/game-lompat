@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>Sky Jumper - Full Version</title>
+    <style>
+        /* --- CSS SECTION --- */
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Mencegah scroll layar pada HP */
+            background-color: #2c3e50;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            height: 100vh;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+        }
+
+        canvas {
+            background: linear-gradient(#87CEEB, #E0F7FA); /* Efek langit gradasi */
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #score-board {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 26px;
+            font-weight: bold;
+            color: #2f3542;
+            text-shadow: 1px 1px 2px rgba(255,255,255,0.8);
+            z-index: 10;
+        }
+
+        #game-over-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            text-align: center;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            z-index: 20;
+            width: 70%;
+        }
+
+        .hidden { display: none; }
+
+        h1 { color: #ff4757; margin-bottom: 10px; }
+        p { font-size: 20px; color: #2f3542; }
+
+        button {
+            padding: 12px 25px;
+            font-size: 18px;
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-top: 20px;
+        }
+
+        button:active { transform: scale(0.9); }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="score-board">Skor: 0</div>
+        
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="game-over-screen" class="hidden">
+            <h1>Yah, Jatuh!</h1>
+            <p id="final-score">Skor: 0</p>
+            <button id="restart-btn">Main Lagi</button>
+        </div>
+    </div>
+
+    <script>
+        /* --- JAVASCRIPT SECTION --- */
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreElement = document.getElementById("score-board");
+        const gameOverScreen = document.getElementById("game-over-screen");
+        const finalScoreElement = document.getElementById("final-score");
+        const restartBtn = document.getElementById("restart-btn");
+
+        // Set ukuran canvas internal (resolusi logic)
+        canvas.width = 400;
+        canvas.height = 600;
+
+        let player, platforms, score, gameActive, cameraY;
+        const gravity = 0.4;
+        const jumpForce = -12; // Kekuatan lompatan
+
+        class Player {
+            constructor() {
+                this.width = 40;
+                this.height = 40;
+                this.x = canvas.width / 2 - 20;
+                this.y = canvas.height - 150;
+                this.vx = 0;
+                this.vy = 0;
+            }
+
+            draw() {
+                // Gambar badan karakter
+                ctx.fillStyle = "#f1c40f"; 
+                ctx.fillRect(this.x, this.y - cameraY, this.width, this.height);
+                // Gambar mata sederhana agar terlihat seperti "karakter"
+                ctx.fillStyle = "black";
+                ctx.fillRect(this.x + 10, this.y - cameraY + 10, 5, 5);
+                ctx.fillRect(this.x + 25, this.y - cameraY + 10, 5, 5);
+            }
+
+            update() {
+                this.vy += gravity;
+                this.y += this.vy;
+                this.x += this.vx;
+
+                // Loop layar kiri ke kanan
+                if (this.x + this.width < 0) this.x = canvas.width;
+                if (this.x > canvas.width) this.x = -this.width;
+            }
+        }
+
+        class Platform {
+            constructor(y) {
+                this.width = 80;
+                this.height = 15;
+                this.x = Math.random() * (canvas.width - this.width);
+                this.y = y;
+            }
+
+            draw() {
+                ctx.fillStyle = "white";
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = "rgba(0,0,0,0.1)";
+                ctx.fillRect(this.x, this.y - cameraY, this.width, this.height);
+                ctx.shadowBlur = 0; // Reset shadow
+            }
+        }
+
+        function init() {
+            player = new Player();
+            platforms = [];
+            score = 0;
+            cameraY = 0;
+            gameActive = true;
+            scoreElement.innerText = "Skor: 0";
+            gameOverScreen.classList.add("hidden");
+
+            // Membuat susunan platform awal
+            for (let i = 0; i < 7; i++) {
+                platforms.push(new Platform(canvas.height - (i * 100)));
+            }
+            animate();
+        }
+
+        function animate() {
+            if (!gameActive) return;
+
+            // Bersihkan canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Kamera mengikuti karakter naik
+            if (player.y < cameraY + 250) {
+                cameraY = player.y - 250;
+            }
+
+            player.update();
+            player.draw();
+
+            platforms.forEach((plat, index) => {
+                plat.draw();
+
+                // Logika Tabrakan (Hanya jika jatuh menimpa platform)
+                if (player.vy > 0 && 
+                    player.x < plat.x + plat.width &&
+                    player.x + player.width > plat.x &&
+                    player.y + player.height > plat.y &&
+                    player.y + player.height < plat.y + plat.height + player.vy) {
+                    
+                    player.vy = jumpForce;
+
+                    // Update Skor
+                    let currentHeightScore = Math.floor((canvas.height - player.y) / 10);
+                    if (currentHeightScore > score) {
+                        score = currentHeightScore;
+                        scoreElement.innerText = "Skor: " + score;
+                    }
+                }
+
+                // Recycle Platform (Hapus yang di bawah, buat baru di atas)
+                if (plat.y - cameraY > canvas.height) {
+                    platforms.splice(index, 1);
+                    platforms.push(new Platform(cameraY - 20));
+                }
+            });
+
+            // Kondisi Kalah
+            if (player.y - cameraY > canvas.height) {
+                gameActive = false;
+                finalScoreElement.innerText = "Skor Akhir: " + score;
+                gameOverScreen.classList.remove("hidden");
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // --- Event Listeners ---
+
+        // Input Keyboard
+        window.addEventListener("keydown", (e) => {
+            if (e.key === "ArrowLeft") player.vx = -7;
+            if (e.key === "ArrowRight") player.vx = 7;
+        });
+        window.addEventListener("keyup", (e) => {
+            if (e.key === "ArrowLeft" || e.key === "ArrowRight") player.vx = 0;
+        });
+
+        // Input Touch (HP)
+        window.addEventListener("touchstart", (e) => {
+            const touchX = e.touches[0].clientX;
+            // Jika sentuh kiri layar, ke kiri. Jika kanan, ke kanan.
+            if (touchX < window.innerWidth / 2) player.vx = -7;
+            else player.vx = 7;
+            e.preventDefault(); // Mencegah zoom/scroll default browser
+        }, {passive: false});
+
+        window.addEventListener("touchend", () => {
+            player.vx = 0;
+        });
+
+        restartBtn.addEventListener("click", init);
+
+        // Jalankan Game
+        init();
+    </script>
+</body>
+</html>
